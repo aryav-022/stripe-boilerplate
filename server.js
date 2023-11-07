@@ -6,47 +6,36 @@ const cors = require("cors");
 app.use(express.json());
 app.use(
 	cors({
-		origin: ["http://localhost:5173", "http://localhost:1337"],
+		origin: ["http://localhost:5173"],
 	})
 );
 
 const stripe = require("stripe")(process.env.STRIPE_PRIVATE_KEY);
-
-const storeItems = new Map();
-
-try {
-    fetch(`${process.env.STRAPI_SERVER_URL}/api/courses`)
-        .then((response) => response.json())
-        .then((data) => {
-            data.data.forEach((course) => {
-                storeItems.set(course.id, {
-                    priceInCents: course.attributes.price * 100,
-                    name: course.attributes.name,
-                });
-            });
-        });
-} catch (e) {
-    console.log(e);
-}
 
 app.post("/create-checkout-session", async (req, res) => {
 	try {
 		const session = await stripe.checkout.sessions.create({
 			payment_method_types: ["card"],
 			mode: "payment",
-			line_items: req.body.items.map((item) => {
-				const storeItem = storeItems.get(item.id);
-				return {
-					price_data: {
-						currency: "inr",
-						product_data: {
-							name: storeItem.name,
+			line_items: await Promise.all(
+				req.body.items.map(async (item) => {
+					const res = await fetch(`${process.env.STRAPI_SERVER_URL}/api/courses/${item.id}?populate=*`);
+					const course = (await res.json()).data;
+					return {
+						price_data: {
+							currency: "inr",
+							product_data: {
+								name: course.attributes.name,
+								images: [
+									`${process.env.STRAPI_SERVER_URL}${course.attributes?.thumbnail?.data?.attributes?.url}`,
+								],
+							},
+							unit_amount: course.attributes.price * 100,
 						},
-						unit_amount: storeItem.priceInCents,
-					},
-					quantity: item.quantity,
-				};
-			}),
+						quantity: item.quantity,
+					};
+				})
+			),
 			success_url: `${process.env.CLIENT_URL}/success`,
 			cancel_url: `${process.env.CLIENT_URL}/cancel`,
 		});
