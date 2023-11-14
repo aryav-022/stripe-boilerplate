@@ -6,7 +6,7 @@ const cors = require("cors");
 app.use(express.json());
 app.use(
 	cors({
-		origin: ["http://localhost:5173"],
+		origin: [process.env.CLIENT_URL],
 	})
 );
 
@@ -41,6 +41,7 @@ app.post("/create-checkout-session", async (req, res) => {
 		});
 		res.json({ url: session.url });
 	} catch (e) {
+		console.log(e);
 		res.status(500).json({ error: e.message });
 	}
 });
